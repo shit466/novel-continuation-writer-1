@@ -1,37 +1,7 @@
-import "dotenv/config";
-import cors from "cors";
-import express from "express";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { analyzeLocally } from "./analyzer.js";
-import { createContinuation } from "./model.js";
-
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: "15mb" }));
-
-app.get("/api/health", (_req, res) => res.json({ ok: true, modelConfigured: Boolean(process.env.LLM_API_KEY) }));
-
-app.post("/api/analyze", (req, res) => {
-  const text = String(req.body?.text ?? "");
-  if (text.trim().length < 100) return res.status(400).json({ error: "正文至少需要 100 字" });
-  res.json(analyzeLocally(text));
-});
-
-app.post("/api/continue", async (req, res) => {
-  try {
-    if (!req.body?.analysis) return res.status(400).json({ error: "请先分析小说" });
-    res.json(await createContinuation(req.body.analysis, String(req.body.instruction ?? ""), Number(req.body.length ?? 1200)));
-  } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "生成失败" });
-  }
-});
-
-const distPath = resolve(process.cwd(), "dist");
-if (existsSync(distPath)) {
-  app.use(express.static(distPath));
-  app.get("/{*splat}", (_req, res) => res.sendFile(resolve(distPath, "index.html")));
-}
-
-const port = Number(process.env.PORT ?? 8787);
-app.listen(port, () => console.log(`Novel continuation API: http://localhost:${port}`));
+import "dotenv/config"; import cors from "cors"; import express from "express"; import {existsSync} from "node:fs"; import {resolve} from "node:path"; import {analyzeLocally} from "./analyzer.js"; import {createContinuation,createOutline,writeFromOutline} from "./model.js"; import {researchWork} from "./research.js";
+const app=express();app.use(cors());app.use(express.json({limit:"15mb"}));app.get("/api/health",(_q,r)=>r.json({ok:true,modelConfigured:Boolean(process.env.LLM_API_KEY),searchConfigured:Boolean(process.env.BRAVE_SEARCH_API_KEY)}));
+app.post("/api/analyze",(q,r)=>{const text=String(q.body?.text??"");if(text.trim().length<100)return r.status(400).json({error:"正文至少需要 100 字"});r.json(analyzeLocally(text))});
+app.post("/api/continue",async(q,r)=>{try{if(!q.body?.analysis)return r.status(400).json({error:"请先分析小说"});r.json(await createContinuation(q.body.analysis,String(q.body.instruction??""),Number(q.body.length??1200)))}catch(e){r.status(500).json({error:e instanceof Error?e.message:"生成失败"})}});
+app.post("/api/research",async(q,r)=>{try{r.json(await researchWork(String(q.body?.query??"")))}catch(e){r.status(500).json({error:e instanceof Error?e.message:"检索失败"})}});
+app.post("/api/outline",async(q,r)=>{try{if(!q.body?.research)return r.status(400).json({error:"请先检索作品资料"});if(!Number.isFinite(Number(q.body.length))||Number(q.body.length)<300)return r.status(400).json({error:"请先填写不少于 300 字的目标字数"});r.json(await createOutline(q.body.research,String(q.body.instruction??""),Number(q.body.length)))}catch(e){r.status(500).json({error:e instanceof Error?e.message:"提纲生成失败"})}});
+app.post("/api/write-from-outline",async(q,r)=>{try{if(!q.body?.research||!q.body?.outline)return r.status(400).json({error:"请先确认提纲"});r.json(await writeFromOutline(q.body.research,q.body.outline,String(q.body.feedback??"")))}catch(e){r.status(500).json({error:e instanceof Error?e.message:"正文生成失败"})}});const dist=resolve(process.cwd(),"dist");if(existsSync(dist)){app.use(express.static(dist));app.get("/{*splat}",(_q,r)=>r.sendFile(resolve(dist,"index.html")))}const port=Number(process.env.PORT??8787);app.listen(port,()=>console.log(`Novel continuation API: http://localhost:${port}`));
